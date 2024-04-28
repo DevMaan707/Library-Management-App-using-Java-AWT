@@ -9,7 +9,7 @@ import java.nio.file.Paths;
 
 public class LibraryManagementApp extends JFrame {
     private JTabbedPane tabbedPane;
-    String fileName;
+    private String fileName;
 
     public LibraryManagementApp() {
         setTitle("Library Management");
@@ -35,13 +35,8 @@ public class LibraryManagementApp extends JFrame {
         bookContainerPanel.setLayout(new FlowLayout(FlowLayout.LEADING, 10, 10)); 
         bookContainerPanel.setPreferredSize(new Dimension(780, 300)); 
 
-        String[] bookNames = {"Book 1", "Book 2", "Book 3"};
-        ImageIcon[] bookImages = {new ImageIcon("book1.jpg"), new ImageIcon("book2.jpg"), new ImageIcon("book3.jpg")};
-
-        for (int i = 0; i < bookNames.length; i++) {
-            JPanel bookContainer = createBookContainer(bookImages[i], bookNames[i], false); 
-            bookContainerPanel.add(bookContainer);
-        }
+        // Fetch book data from the database and create book containers
+        fetchBooksFromDatabase(bookContainerPanel);
 
         homePanel.add(bookContainerPanel);
 
@@ -86,18 +81,18 @@ public class LibraryManagementApp extends JFrame {
 
                 DataBase db = new DataBase();
                 db.addBook(bookName, fileBytes);
+
+                // Update the displayed books after adding a new book
+                fetchBooksFromDatabase(bookContainerPanel);
+                tabbedPane.setSelectedIndex(0); // Switch to the Home tab
             }
         });
 
         JPanel deletePanel = new JPanel();
         deletePanel.setLayout(new FlowLayout(FlowLayout.LEADING, 10, 10)); 
 
-        for (int i = 0; i < bookNames.length; i++) {
-            JPanel deleteContainer = createBookContainer(bookImages[i], bookNames[i], true); 
-            JButton deleteButton = new JButton("Delete this book");
-            deleteContainer.add(deleteButton, BorderLayout.SOUTH);
-            deletePanel.add(deleteContainer);
-        }
+        // Fetch book data from the database and create delete book containers
+        fetchDeleteBooksFromDatabase(deletePanel);
 
         tabbedPane.addTab("Home", homePanel);
         tabbedPane.addTab("Add Books", addPanel);
@@ -107,19 +102,87 @@ public class LibraryManagementApp extends JFrame {
         setVisible(true);
     }
 
+    private void fetchBooksFromDatabase(JPanel bookContainerPanel) {
+       
+        try (Connection con = DriverManager.getConnection("jdbc:oracle:thin:@localhost:1521:xe", "system", "manager")) {
+            String sql = "SELECT name, pic FROM books";
+            try (PreparedStatement stmt = con.prepareStatement(sql)) {
+                ResultSet rs = stmt.executeQuery();
+                while (rs.next()) {
+                    String bookName = rs.getString("name");
+                    byte[] imageBytes = rs.getBytes("pic");
+                    ImageIcon bookImage = new ImageIcon(imageBytes);
+                    JPanel bookContainer = createBookContainer(bookImage, bookName, true);
+                    bookContainerPanel.add(bookContainer);
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error fetching books from database: " + e.getMessage());
+        }
+    }
+
+    private void fetchDeleteBooksFromDatabase(JPanel deletePanel) {
+  
+        try (Connection con = DriverManager.getConnection("jdbc:oracle:thin:@localhost:1521:xe", "system", "manager")) {
+            String sql = "SELECT name, pic FROM books";
+            try (PreparedStatement stmt = con.prepareStatement(sql)) {
+                ResultSet rs = stmt.executeQuery();
+                while (rs.next()) {
+                    String bookName = rs.getString("name");
+                    byte[] imageBytes = rs.getBytes("pic");
+                    ImageIcon bookImage = new ImageIcon(imageBytes);
+                    JPanel deleteContainer = createBookContainer(bookImage, bookName, true);
+                    JButton deleteButton = new JButton("Delete this book");
+                    deleteButton.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent e) {
+                            // Delete book from database
+                            deleteBookFromDatabase(bookName);
+                            // Update the displayed books after deletion
+                            deletePanel.remove(deleteContainer);
+                            deletePanel.revalidate();
+                            deletePanel.repaint();
+                        }
+                    });
+                    deleteContainer.add(deleteButton, BorderLayout.SOUTH);
+                    deletePanel.add(deleteContainer);
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error fetching books for deletion from database: " + e.getMessage());
+        }
+    }
+
+    private void deleteBookFromDatabase(String bookName) {
+       
+        try (Connection con = DriverManager.getConnection("jdbc:oracle:thin:@localhost:1521:xe", "system", "manager")) {
+            String sql = "DELETE FROM books WHERE name = ?";
+            try (PreparedStatement stmt = con.prepareStatement(sql)) {
+                stmt.setString(1, bookName);
+                int rowsDeleted = stmt.executeUpdate();
+                if (rowsDeleted > 0) {
+                    System.out.println("Book deleted successfully.");
+                } else {
+                    System.out.println("Book not found.");
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error deleting book from database: " + e.getMessage());
+        }
+    }
+
     private JPanel createBookContainer(ImageIcon bookImage, String bookName, boolean hasDeleteButton) {
         JPanel bookContainer = new JPanel();
         bookContainer.setLayout(new BorderLayout());
-        bookContainer.setPreferredSize(new Dimension(150, 280)); // Adjust dimensions as needed
-        bookContainer.setBorder(BorderFactory.createLineBorder(Color.BLACK)); // Add border
+        bookContainer.setPreferredSize(new Dimension(150, 280)); 
+        bookContainer.setBorder(BorderFactory.createLineBorder(Color.BLACK));
 
         JLabel imageLabel = new JLabel(bookImage);
-        imageLabel.setPreferredSize(new Dimension(150, 210)); // 75% height for image
+        imageLabel.setPreferredSize(new Dimension(150, 210)); 
         imageLabel.setHorizontalAlignment(SwingConstants.CENTER);
         bookContainer.add(imageLabel, BorderLayout.CENTER);
 
         JLabel nameLabel = new JLabel(bookName);
-        nameLabel.setPreferredSize(new Dimension(150, 70)); // 25% height for name
+        nameLabel.setPreferredSize(new Dimension(150, 70)); 
         nameLabel.setHorizontalAlignment(SwingConstants.CENTER);
         bookContainer.add(nameLabel, BorderLayout.SOUTH);
 
