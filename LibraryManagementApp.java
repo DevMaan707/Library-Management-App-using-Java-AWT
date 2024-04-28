@@ -1,8 +1,15 @@
 import java.awt.*;
+import java.awt.event.*;
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import java.io.*;
+import java.sql.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 public class LibraryManagementApp extends JFrame {
     private JTabbedPane tabbedPane;
+    String fileName;
 
     public LibraryManagementApp() {
         setTitle("Library Management");
@@ -14,7 +21,7 @@ public class LibraryManagementApp extends JFrame {
 
         JPanel homePanel = new JPanel();
         homePanel.setLayout(new BoxLayout(homePanel, BoxLayout.Y_AXIS));
-        homePanel.setAlignmentX(Component.LEFT_ALIGNMENT); // Align to the left
+        homePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel mainHeading = new JLabel("Library");
         mainHeading.setFont(new Font("Arial", Font.BOLD, 24));
@@ -25,14 +32,14 @@ public class LibraryManagementApp extends JFrame {
         homePanel.add(featuredBooksLabel);
 
         JPanel bookContainerPanel = new JPanel();
-        bookContainerPanel.setLayout(new FlowLayout(FlowLayout.LEADING, 10, 10)); // Flow layout with horizontal gap
-        bookContainerPanel.setPreferredSize(new Dimension(780, 300)); // Adjust width as needed
+        bookContainerPanel.setLayout(new FlowLayout(FlowLayout.LEADING, 10, 10)); 
+        bookContainerPanel.setPreferredSize(new Dimension(780, 300)); 
 
         String[] bookNames = {"Book 1", "Book 2", "Book 3"};
         ImageIcon[] bookImages = {new ImageIcon("book1.jpg"), new ImageIcon("book2.jpg"), new ImageIcon("book3.jpg")};
 
         for (int i = 0; i < bookNames.length; i++) {
-            JPanel bookContainer = createBookContainer(bookImages[i], bookNames[i], false); // No delete button in Home tab
+            JPanel bookContainer = createBookContainer(bookImages[i], bookNames[i], false); 
             bookContainerPanel.add(bookContainer);
         }
 
@@ -41,17 +48,52 @@ public class LibraryManagementApp extends JFrame {
         JPanel addPanel = new JPanel();
         JTextField bookNameField = new JTextField(20);
         JButton uploadButton = new JButton("Upload Image");
-        JButton addButton = new JButton("Add this book"); // Added "Add this book" button
+        JButton addButton = new JButton("Add this book"); 
         addPanel.add(new JLabel("Book Name:"));
         addPanel.add(bookNameField);
         addPanel.add(uploadButton);
         addPanel.add(addButton);
 
+        uploadButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setFileFilter(new FileNameExtensionFilter("Image Files", "jpg", "jpeg", "png", "gif"));
+                int result = fileChooser.showOpenDialog(null);
+                if (result == JFileChooser.APPROVE_OPTION) {
+                    File selectedFile = fileChooser.getSelectedFile();
+                 
+                    System.out.println("Selected file: " + selectedFile.getAbsolutePath());
+                    fileName = selectedFile.getAbsolutePath();
+                }
+            }
+        });
+
+        addButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String bookName = bookNameField.getText();
+                if (bookName.isEmpty()) {
+                    JOptionPane.showMessageDialog(null, "Please enter a book name.");
+                    return;
+                }
+
+                byte[] fileBytes = null;
+                try {
+                    fileBytes = Files.readAllBytes(Paths.get(fileName)); 
+                } catch (IOException ex) {
+                    System.out.println("Error reading image file: " + ex.getMessage());
+                    return;
+                }
+
+                DataBase db = new DataBase();
+                db.addBook(bookName, fileBytes);
+            }
+        });
+
         JPanel deletePanel = new JPanel();
-        deletePanel.setLayout(new FlowLayout(FlowLayout.LEADING, 10, 10)); // Flow layout with horizontal gap
+        deletePanel.setLayout(new FlowLayout(FlowLayout.LEADING, 10, 10)); 
 
         for (int i = 0; i < bookNames.length; i++) {
-            JPanel deleteContainer = createBookContainer(bookImages[i], bookNames[i], true); // With delete button in Delete Books tab
+            JPanel deleteContainer = createBookContainer(bookImages[i], bookNames[i], true); 
             JButton deleteButton = new JButton("Delete this book");
             deleteContainer.add(deleteButton, BorderLayout.SOUTH);
             deletePanel.add(deleteContainer);
@@ -91,5 +133,25 @@ public class LibraryManagementApp extends JFrame {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new LibraryManagementApp());
+    }
+}
+
+class DataBase {
+    public void addBook(String name, byte[] imageBytes) {
+        try (Connection con = DriverManager.getConnection("jdbc:oracle:thin:@localhost:1521:xe", "system", "manager")) {
+            String sql = "INSERT INTO books (name, pic) VALUES (?, ?)";
+            try (PreparedStatement stmt = con.prepareStatement(sql)) {
+                stmt.setString(1, name);
+                stmt.setBytes(2, imageBytes);
+                int rowsInserted = stmt.executeUpdate();
+                if (rowsInserted > 0) {
+                    System.out.println("Book added successfully.");
+                } else {
+                    System.out.println("Failed to add book.");
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error adding book: " + e.getMessage());
+        }
     }
 }
