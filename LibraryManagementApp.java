@@ -21,7 +21,6 @@ public class LibraryManagementApp extends JFrame {
 
         JPanel homePanel = new JPanel();
         homePanel.setLayout(new BoxLayout(homePanel, BoxLayout.Y_AXIS));
-        homePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel mainHeading = new JLabel("Library");
         mainHeading.setFont(new Font("Arial", Font.BOLD, 24));
@@ -35,7 +34,6 @@ public class LibraryManagementApp extends JFrame {
         bookContainerPanel.setLayout(new FlowLayout(FlowLayout.LEADING, 10, 10)); 
         bookContainerPanel.setPreferredSize(new Dimension(780, 300)); 
 
-        // Fetch book data from the database and create book containers without delete buttons
         fetchBooksFromDatabase(bookContainerPanel, false);
 
         homePanel.add(bookContainerPanel);
@@ -56,7 +54,6 @@ public class LibraryManagementApp extends JFrame {
                 int result = fileChooser.showOpenDialog(null);
                 if (result == JFileChooser.APPROVE_OPTION) {
                     File selectedFile = fileChooser.getSelectedFile();
-                    System.out.println("Selected file: " + selectedFile.getAbsolutePath());
                     fileName = selectedFile.getAbsolutePath();
                 }
             }
@@ -74,23 +71,23 @@ public class LibraryManagementApp extends JFrame {
                 try {
                     fileBytes = Files.readAllBytes(Paths.get(fileName)); 
                 } catch (IOException ex) {
-                    System.out.println("Error reading image file: " + ex.getMessage());
                     return;
                 }
 
                 DataBase db = new DataBase();
                 db.addBook(bookName, fileBytes);
 
-                // Update the displayed books after adding a new book
-                fetchBooksFromDatabase(bookContainerPanel, false);
-                tabbedPane.setSelectedIndex(0); // Switch to the Home tab
+                refreshHomeTab();
+                refreshDeleteTab();
+                tabbedPane.setSelectedIndex(0); 
+              
+                JOptionPane.showMessageDialog(null, "Book added successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
             }
         });
 
         JPanel deletePanel = new JPanel();
         deletePanel.setLayout(new FlowLayout(FlowLayout.LEADING, 10, 10)); 
 
-        // Fetch book data from the database and create delete book containers
         fetchBooksFromDatabase(deletePanel, true);
 
         tabbedPane.addTab("Home", homePanel);
@@ -102,7 +99,6 @@ public class LibraryManagementApp extends JFrame {
     }
 
     private void fetchBooksFromDatabase(JPanel panel, boolean includeDeleteButton) {
-        // Connect to the database and fetch book data
         try (Connection con = DriverManager.getConnection("jdbc:oracle:thin:@localhost:1521:xe", "system", "manager")) {
             String sql = "SELECT name, pic FROM books";
             try (PreparedStatement stmt = con.prepareStatement(sql)) {
@@ -126,7 +122,6 @@ public class LibraryManagementApp extends JFrame {
         bookContainer.setPreferredSize(new Dimension(150, 280)); 
         bookContainer.setBorder(BorderFactory.createLineBorder(Color.BLACK));
 
-        // Adjust image size to fit in the container
         Image img = bookImage.getImage().getScaledInstance(150, 210, Image.SCALE_SMOOTH);
         ImageIcon scaledImage = new ImageIcon(img);
         JLabel imageLabel = new JLabel(scaledImage);
@@ -142,14 +137,36 @@ public class LibraryManagementApp extends JFrame {
             JButton deleteButton = new JButton("Delete this book");
             deleteButton.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
-                    // Implement book deletion functionality here
-                    System.out.println("Delete button clicked for book: " + bookName);
+                    DataBase db = new DataBase();
+                    db.deleteBook(bookName);
+
+                    refreshHomeTab();
+                    refreshDeleteTab();
+
+                    JOptionPane.showMessageDialog(null, "Book deleted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
                 }
             });
             bookContainer.add(deleteButton, BorderLayout.SOUTH);
         }
 
         return bookContainer;
+    }
+
+    private void refreshHomeTab() {
+        JPanel homePanel = (JPanel) tabbedPane.getComponentAt(0);
+        JPanel bookContainerPanel = (JPanel) homePanel.getComponent(2); 
+        bookContainerPanel.removeAll();
+        fetchBooksFromDatabase(bookContainerPanel, false);
+        homePanel.revalidate();
+        homePanel.repaint();
+    }
+
+    private void refreshDeleteTab() {
+        JPanel deletePanel = (JPanel) tabbedPane.getComponentAt(2);
+        deletePanel.removeAll();
+        fetchBooksFromDatabase(deletePanel, true);
+        deletePanel.revalidate();
+        deletePanel.repaint();
     }
 
     public static void main(String[] args) {
@@ -173,6 +190,23 @@ class DataBase {
             }
         } catch (SQLException e) {
             System.out.println("Error adding book: " + e.getMessage());
+        }
+    }
+
+    public void deleteBook(String name) {
+        try (Connection con = DriverManager.getConnection("jdbc:oracle:thin:@localhost:1521:xe", "system", "manager")) {
+            String sql = "DELETE FROM books WHERE name = ?";
+            try (PreparedStatement stmt = con.prepareStatement(sql)) {
+                stmt.setString(1, name);
+                int rowsDeleted = stmt.executeUpdate();
+                if (rowsDeleted > 0) {
+                    System.out.println("Book deleted successfully.");
+                } else {
+                    System.out.println("Failed to delete book.");
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error deleting book: " + e.getMessage());
         }
     }
 }
